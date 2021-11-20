@@ -3,11 +3,11 @@
 namespace Sparkouttech\PaymentGateway\App\Controllers;
 
 use Illuminate\Routing\Controller;
-use Illuminate\Support\Facades\Log;
-use Stripe;
 
 class StripePaymentController extends Controller
 {
+    protected $secretKey;
+
     public function __construct()
     {
         $this->setup();
@@ -15,50 +15,91 @@ class StripePaymentController extends Controller
 
     public function setup()
     {
-        Stripe\Stripe::setApiKey(config('payment-gateway.stripe_secret'));
+        $this->secretKey = config('payment-gateway.stripe_secret');
     }
 
     public function createCustomer(array $user)
     {
-        return Stripe\Customer::create([
-            'email' => $user['email'],
-            'name' => $user['name'],
-            'phone' => $user['phone'],
-            'description' => $user['email']
-        ]);
+        $url = 'https://api.stripe.com/v1/customers';
+
+        $data['email'] = $user['email'];
+        $data['name'] = $user['name'];
+        $data['phone'] = $user['phone'];
+        $data['description'] = $user['description'];
+
+        $httpBuildQueryData  = http_build_query($data);
+
+        return $this->executeCurlInit($url, $httpBuildQueryData);
     }
 
-    public function createCard(array $attributes)
+    public function createCharge($amount, $stripeToken, $description, $currency = "usd")
     {
-        return Stripe\Card::create($attributes);
-    }
+        $url = 'https://api.stripe.com/v1/charge';
 
-    public function createCharge($amount, $stripeToken, $currency = "usd")
-    {
-        return Stripe\Charge::create ([
-            "amount" => $amount * 100,
-            "currency" => $currency,
-            "source" => $stripeToken,
-            "description" => "This payment is tested purpose."
-        ]);
+        $data['amount'] = ($amount * 100);
+        $data['currency'] = $currency;
+        $data['source'] = $stripeToken;
+        $data['description'] = $description;
+
+        $httpBuildQueryData  = http_build_query($data);
+
+        return $this->executeCurlInit($url, $httpBuildQueryData);
     }
 
     public function createSetupIntent(array $attributes)
     {
-        return Stripe\SetupIntent::create([
-            'customer' => $attributes['customer'],
-            'usage' => "on_session"
-        ]);
+        $url = 'https://api.stripe.com/v1/setup_intents';
+
+        $data['customer'] = $attributes['customer'];
+        $data['usage'] = "on_session";
+
+        $httpBuildQueryData  = http_build_query($data);
+
+        return $this->executeCurlInit($url, $httpBuildQueryData);
     }
 
     public function createPaymentIntent(array $attributes)
     {
-        return Stripe\PaymentIntent::create([
-            'amount' => ($attributes['amount'] * 100),
-            'currency' => $attributes['currency'],
-            'customer' => $attributes['customer'],
-            'payment_method' => $attributes['payment_method']
-        ]);
+        $url = 'https://api.stripe.com/v1/payment_intents';
+
+        $data['amount'] = ($attributes['amount'] * 100);
+        $data['currency'] = $attributes['currency'];
+        $data['customer'] = $attributes['customer'];
+        $data['payment_method'] = $attributes['payment_method'];
+
+        $httpBuildQueryData  = http_build_query($data);
+
+        return $this->executeCurlInit($url, $httpBuildQueryData);
+    }
+
+    public function createDirectPaymentIntent(array $attributes)
+    {
+        $url = 'https://api.stripe.com/v1/payment_intents';
+
+        $data['amount'] = ($attributes['amount'] * 100);
+        $data['currency'] = $attributes['currency'];
+
+        $httpBuildQueryData  = http_build_query($data);
+
+        return $this->executeCurlInit($url, $httpBuildQueryData);
+    }
+
+
+
+    protected function executeCurlInit($url, $httpBuildQueryData)
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, true); /*POST*/
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $httpBuildQueryData);
+        curl_setopt($ch, CURLOPT_USERPWD, $this->secretKey . ':');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+        $curlResult = curl_exec($ch);
+
+        curl_close($ch);
+
+        return json_decode($curlResult);
     }
 
 }
